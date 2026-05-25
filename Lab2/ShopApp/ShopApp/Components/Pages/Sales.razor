@@ -1,0 +1,194 @@
+﻿@page "/sales"
+@rendermode InteractiveServer
+@inject ISaleService SaleSvc
+@inject ILogger<Sales> Logger
+@using ShopApp.Models
+@using ShopApp.Services
+
+<PageTitle>Продажі</PageTitle>
+<h3><i class="bi bi-receipt me-2 text-warning"></i>Продажі</h3>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+<button class="btn btn-warning mb-3" @onclick="OpenCreate">
+    <i class="bi bi-plus-circle me-1"></i>Додати продаж
+</button>
+
+@if (_sales is null)
+{
+    <p><em>Завантаження…</em></p>
+}
+else
+{
+    <table class="table table-striped table-hover align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>#</th><th>Чек №</th><th>Товар</th><th>Дата</th><th>К-ть</th>
+                <th>Сума</th><th style="width:120px"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var s in _sales)
+            {
+                <tr>
+                    <td>@s.SaleId</td>
+                    <td>@s.CheckNo</td>
+                    <td>@(s.Good?.Name ?? "—")</td>
+                    <td>@s.DateSale.ToString("dd.MM.yyyy")</td>
+                    <td>@s.Quantity</td>
+                    @{
+                        var total = (s.Quantity * (s.Good?.Price ?? 0d)) ?? 0d;
+                    }
+
+                    <td>@total.ToString("N2") ₴</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-secondary me-1" @onclick="() => OpenEdit(s)">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(s)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr class="table-secondary fw-bold">
+                <td colspan="5">Загальна сума:</td>
+                <td>
+                    @((_sales.Sum(s => s.Quantity * (s.Good?.Price ?? 0d)) ?? 0d).ToString("N2")) ₴
+                </td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+}
+
+@if (_showForm)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_isEdit ? "Редагувати" : "Новий") продаж</h5>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="_form" OnValidSubmit="SaveAsync">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+
+                        <div class="mb-3">
+                            <label class="form-label">Чек № *</label>
+                            <InputNumber class="form-control" @bind-Value="_form.CheckNo" />
+                            <ValidationMessage For="() => _form.CheckNo" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Товар *</label>
+                            <InputSelect class="form-select" @bind-Value="_form.GoodId">
+                                <option value="0">— оберіть товар —</option>
+                                @foreach (var g in _goods)
+                                {
+                                    <option value="@g.GoodId">@g.Name (@g.Price?.ToString("N2") ₴)</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="() => _form.GoodId" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Дата *</label>
+                            <InputDate class="form-control" @bind-Value="_form.DateSale" />
+                            <ValidationMessage For="() => _form.DateSale" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Кількість *</label>
+                            <InputNumber class="form-control" @bind-Value="_form.Quantity" />
+                            <ValidationMessage For="() => _form.Quantity" />
+                        </div>
+
+                        <button type="submit" class="btn btn-warning me-2">
+                            <i class="bi bi-check2 me-1"></i>Зберегти
+                        </button>
+                        <button type="button" class="btn btn-secondary" @onclick="CloseForm">Скасувати</button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_deleteTarget is not null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="bi bi-exclamation-triangle me-2"></i>Видалити продаж?</h5>
+                </div>
+                <div class="modal-body">Видалити продаж №<strong>@_deleteTarget.SaleId</strong>?</div>
+                <div class="modal-footer">
+                    <button class="btn btn-danger" @onclick="DeleteConfirmedAsync">Так, видалити</button>
+                    <button class="btn btn-secondary" @onclick="() => _deleteTarget = null">Скасувати</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<Sale>? _sales;
+    List<Good> _goods = new();
+    Sale _form = new();
+    Sale? _deleteTarget;
+    bool _showForm, _isEdit;
+    string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Logger.LogInformation("Sales page loaded");
+        await LoadAsync();
+        _goods = await SaleSvc.GetGoodsAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        try { _sales = await SaleSvc.GetAllAsync(); }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    void OpenCreate() { _form = new Sale { DateSale = DateTime.Today }; _isEdit = false; _showForm = true; }
+
+    void OpenEdit(Sale s)
+    {
+        _form = new Sale { SaleId=s.SaleId, CheckNo=s.CheckNo, GoodId=s.GoodId, DateSale=s.DateSale, Quantity=s.Quantity };
+        _isEdit = true; _showForm = true;
+    }
+
+    void CloseForm() => _showForm = false;
+    void ConfirmDelete(Sale s) => _deleteTarget = s;
+
+    async Task SaveAsync()
+    {
+        try
+        {
+            if (_isEdit) await SaleSvc.UpdateAsync(_form);
+            else         await SaleSvc.CreateAsync(_form);
+            CloseForm();
+            await LoadAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    async Task DeleteConfirmedAsync()
+    {
+        try
+        {
+            await SaleSvc.DeleteAsync(_deleteTarget!.SaleId);
+            _deleteTarget = null;
+            await LoadAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+}

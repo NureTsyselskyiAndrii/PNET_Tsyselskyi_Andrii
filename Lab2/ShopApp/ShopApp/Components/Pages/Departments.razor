@@ -1,0 +1,160 @@
+﻿@page "/departments"
+@rendermode InteractiveServer
+@inject IDepartmentService DeptSvc
+@inject ILogger<Departments> Logger
+@using ShopApp.Models
+@using ShopApp.Services
+
+<PageTitle>Відділи</PageTitle>
+<h3><i class="bi bi-building me-2 text-primary"></i>Відділи</h3>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+<button class="btn btn-primary mb-3" @onclick="OpenCreate">
+    <i class="bi bi-plus-circle me-1"></i>Додати відділ
+</button>
+
+@if (_departments is null)
+{
+    <p><em>Завантаження…</em></p>
+}
+else
+{
+    <table class="table table-striped table-hover align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>#</th>
+                <th>Назва</th>
+                <th>Опис</th>
+                <th style="width:120px"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var d in _departments)
+            {
+                <tr>
+                    <td>@d.DeptId</td>
+                    <td>@d.Name</td>
+                    <td>@d.Info</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-secondary me-1" @onclick="() => OpenEdit(d)">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(d)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@* ── Modal form ── *@
+@if (_showForm)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_isEdit ? "Редагувати" : "Новий") відділ</h5>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="_form" OnValidSubmit="SaveAsync">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+
+                        <div class="mb-3">
+                            <label class="form-label">Назва</label>
+                            <InputText class="form-control" @bind-Value="_form.Name" />
+                            <ValidationMessage For="() => _form.Name" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Опис</label>
+                            <InputText class="form-control" @bind-Value="_form.Info" />
+                        </div>
+
+                        <button type="submit" class="btn btn-success me-2">
+                            <i class="bi bi-check2 me-1"></i>Зберегти
+                        </button>
+                        <button type="button" class="btn btn-secondary" @onclick="CloseForm">Скасувати</button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Delete confirm ── *@
+@if (_deleteTarget is not null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="bi bi-exclamation-triangle me-2"></i>Видалити відділ?</h5>
+                </div>
+                <div class="modal-body">
+                    Видалити відділ <strong>@_deleteTarget.Name</strong>? Товари цього відділу отримають NULL у полі відділу.
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-danger" @onclick="DeleteConfirmedAsync">Так, видалити</button>
+                    <button class="btn btn-secondary" @onclick="() => _deleteTarget = null">Скасувати</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<Department>? _departments;
+    Department _form = new();
+    Department? _deleteTarget;
+    bool _showForm;
+    bool _isEdit;
+    string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Logger.LogInformation("Departments page loaded");
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        try { _departments = await DeptSvc.GetAllAsync(); }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    void OpenCreate() { _form = new(); _isEdit = false; _showForm = true; }
+    void OpenEdit(Department d) { _form = new Department { DeptId = d.DeptId, Name = d.Name, Info = d.Info }; _isEdit = true; _showForm = true; }
+    void CloseForm() => _showForm = false;
+    void ConfirmDelete(Department d) => _deleteTarget = d;
+
+    async Task SaveAsync()
+    {
+        try
+        {
+            if (_isEdit) await DeptSvc.UpdateAsync(_form);
+            else await DeptSvc.CreateAsync(_form);
+            CloseForm();
+            await LoadAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    async Task DeleteConfirmedAsync()
+    {
+        try
+        {
+            await DeptSvc.DeleteAsync(_deleteTarget!.DeptId);
+            _deleteTarget = null;
+            await LoadAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+}
